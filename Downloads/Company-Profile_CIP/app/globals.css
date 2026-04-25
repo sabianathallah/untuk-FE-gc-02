@@ -494,14 +494,13 @@ img { max-width: 100%; }
 }
 
 .hero-logo {
-  width: 180px;
-  max-width: 65vw;
+  width: 450px;
+  max-width: 85vw;
   height: auto;
   object-fit: contain;
   margin-bottom: 8px;
   animation: heroFadeIn 1s var(--ease-expo) 0.2s both;
 }
-@media (min-width: 768px) { .hero-logo { width: 210px; } }
 @keyframes heroFadeIn {
   from { opacity: 0; transform: translateY(16px); filter: blur(4px); }
   to   { opacity: 1; transform: none; filter: none; }
@@ -524,8 +523,8 @@ img { max-width: 100%; }
 }
 .hero-pt, .hero-main {
   font-family: var(--font-cormorant);
-  font-size: clamp(26px, 7.5vw, 58px);
-  font-weight: 700;
+  font-size: clamp(16px, 4.5vw, 32px);
+  font-weight: 600;
   color: var(--gold-light);
   letter-spacing: 1px;
   line-height: 1.05;
@@ -537,10 +536,10 @@ img { max-width: 100%; }
   .hero-pt, .hero-main { letter-spacing: 2px; }
 }
 @media (min-width: 540px) {
-  .hero-pt, .hero-main { letter-spacing: 4px; }
+  .hero-pt, .hero-main { letter-spacing: 3px; }
 }
 @media (min-width: 768px) {
-  .hero-pt, .hero-main { letter-spacing: 6px; font-size: clamp(36px, 5.5vw, 58px); }
+  .hero-pt, .hero-main { letter-spacing: 4px; font-size: clamp(20px, 3vw, 32px); }
 }
 
 .hero-char {
