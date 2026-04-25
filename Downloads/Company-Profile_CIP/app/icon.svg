@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" role="img" aria-label="PT Citra Investama Palapa">
+  <defs>
+    <radialGradient id="globeBg" cx="38%" cy="32%" r="65%">
+      <stop offset="0%" stop-color="#1B2F48"/>
+      <stop offset="100%" stop-color="#040710"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#9A6F18"/>
+      <stop offset="38%"  stop-color="#E8C96A"/>
+      <stop offset="62%"  stop-color="#F5E090"/>
+      <stop offset="100%" stop-color="#B8920E"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="5%" y1="95%" x2="95%" y2="5%">
+      <stop offset="0%"   stop-color="#6A4010"/>
+      <stop offset="30%"  stop-color="#C9A84C"/>
+      <stop offset="62%"  stop-color="#F5E090"/>
+      <stop offset="100%" stop-color="#C9A84C"/>
+    </linearGradient>
+    <clipPath id="gc">
+      <circle cx="212" cy="168" r="128"/>
+    </clipPath>
+    <filter id="gw" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sg" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="560" height="420" fill="#050505"/>
+
+  <!-- Globe ambient glow -->
+  <circle cx="212" cy="168" r="142" fill="none" stroke="#C9A84C" stroke-width="2" opacity="0.08" filter="url(#sg)"/>
+
+  <!-- Globe body -->
+  <circle cx="212" cy="168" r="128" fill="url(#globeBg)"/>
+  <circle cx="212" cy="168" r="128" fill="none" stroke="#C9A84C" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Grid lines -->
+  <g clip-path="url(#gc)" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.18">
+    <line x1="84" y1="168" x2="340" y2="168"/>
+    <ellipse cx="212" cy="168" rx="128" ry="37"/>
+    <ellipse cx="212" cy="168" rx="128" ry="76"/>
+    <ellipse cx="212" cy="168" rx="128" ry="108"/>
+    <line x1="212" y1="40" x2="212" y2="296"/>
+    <ellipse cx="212" cy="168" rx="37" ry="128"/>
+    <ellipse cx="212" cy="168" rx="76" ry="128"/>
+    <ellipse cx="212" cy="168" rx="108" ry="128"/>
+  </g>
+
+  <!-- Continents (SE Asia / Pacific focus) -->
+  <g clip-path="url(#gc)" fill="url(#gold)">
+    <!-- Mainland Asia -->
+    <path d="M 144,76 C 160,66 178,63 197,68 L 220,71 C 238,66 256,64 272,70 L 290,78
+             C 304,73 318,81 322,94 L 318,110 C 324,124 317,136 304,140 L 284,143
+             C 268,151 248,154 232,148 L 215,154 C 200,161 183,154 173,146 L 160,141
+             C 144,146 129,136 122,124 L 118,108 C 113,90 122,78 144,76 Z" opacity="0.82"/>
+    <!-- Indochina -->
+    <path d="M 183,144 C 198,138 213,144 217,158 L 214,174
+             C 207,187 193,191 181,182 L 172,171 C 165,158 169,147 183,144 Z" opacity="0.80"/>
+    <!-- Malay Peninsula -->
+    <path d="M 196,178 L 213,174 L 218,188 L 207,195 L 193,188 Z" opacity="0.77"/>
+    <!-- Sumatra -->
+    <path d="M 162,195 C 178,186 200,189 207,202 L 204,218
+             C 197,228 176,228 163,218 L 156,205 Z"
+          opacity="0.80" transform="rotate(-16,182,207)"/>
+    <!-- Java -->
+    <path d="M 194,218 C 213,211 236,213 243,223 L 240,233
+             C 231,240 210,238 197,229 Z"
+          opacity="0.78" transform="rotate(-5,218,225)"/>
+    <!-- Borneo -->
+    <path d="M 226,194 C 244,185 264,188 271,202 L 269,220
+             C 261,232 242,233 230,221 L 222,208 Z" opacity="0.82"/>
+    <!-- Sulawesi -->
+    <path d="M 272,194 C 279,187 288,190 291,199 L 287,212
+             C 282,219 272,217 268,208 Z" opacity="0.79"/>
+    <!-- Philippines -->
+    <path d="M 278,140 C 285,133 296,135 299,144 L 296,158
+             C 291,165 281,164 277,157 Z" opacity="0.77"/>
+    <ellipse cx="290" cy="164" rx="5" ry="9" opacity="0.64"/>
+    <!-- Papua/New Guinea -->
+    <path d="M 298,218 C 315,209 334,213 339,227 L 335,240
+             C 326,248 308,245 302,231 Z" opacity="0.73"/>
+    <!-- Australia -->
+    <path d="M 254,248 C 278,237 310,242 319,260 L 321,282
+             C 317,300 293,308 269,299 L 248,284
+             C 233,270 235,258 254,248 Z" opacity="0.79"/>
+  </g>
+
+  <!-- Arrow shadow -->
+  <path d="M 76,272 C 50,283 42,260 57,233
+           C 74,204 118,189 152,186
+           C 180,183 200,176 212,168
+           C 244,150 284,125 338,92
+           C 376,68 418,44 462,20"
+        fill="none" stroke="#2A1A06" stroke-width="28" stroke-linecap="round"/>
+
+  <!-- Arrow main body -->
+  <path d="M 76,272 C 50,283 42,260 57,233
+           C 74,204 118,189 152,186
+           C 180,183 200,176 212,168
+           C 244,150 284,125 338,92
+           C 376,68 418,44 462,20"
+        fill="none" stroke="url(#arrowGrad)" stroke-width="20" stroke-linecap="round"
+        filter="url(#gw)"/>
+
+  <!-- Arrow highlight -->
+  <path d="M 76,272 C 50,283 42,260 57,233
+           C 74,204 118,189 152,186
+           C 180,183 200,176 212,168
+           C 244,150 284,125 338,92
+           C 376,68 418,44 462,20"
+        fill="none" stroke="#F5E090" stroke-width="5" stroke-linecap="round" opacity="0.40"/>
+
+  <!-- Arrowhead -->
+  <polygon points="462,20 424,46 448,66" fill="url(#gold)" filter="url(#gw)"/>
+  <polygon points="462,20 428,40 450,58" fill="#F5E090" opacity="0.42"/>
+
+  <!-- Text glow -->
+  <text x="280" y="348"
+        font-family="'Cormorant Garamond', Georgia, 'Times New Roman', serif"
+        font-size="36" font-weight="700"
+        fill="#C9A84C" text-anchor="middle" letter-spacing="1.5"
+        opacity="0.22" filter="url(#sg)">Citra Investama Palapa</text>
+
+  <!-- Main text -->
+  <text x="280" y="348"
+        font-family="'Cormorant Garamond', Georgia, 'Times New Roman', serif"
+        font-size="36" font-weight="700"
+        fill="url(#gold)" text-anchor="middle" letter-spacing="1.5">Citra Investama Palapa</text>
+
+  <!-- Star sparkle + flanking lines -->
+  <g opacity="0.88">
+    <circle cx="280" cy="372" r="3" fill="#C9A84C" filter="url(#gw)"/>
+    <line x1="280" y1="361" x2="280" y2="383" stroke="#C9A84C" stroke-width="1.5" opacity="0.65"/>
+    <line x1="269" y1="372" x2="291" y2="372" stroke="#C9A84C" stroke-width="1.5" opacity="0.65"/>
+    <line x1="272" y1="364" x2="288" y2="380" stroke="#C9A84C" stroke-width="1"  opacity="0.40"/>
+    <line x1="288" y1="364" x2="272" y2="380" stroke="#C9A84C" stroke-width="1"  opacity="0.40"/>
+    <line x1="115" y1="372" x2="267" y2="372" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/>
+    <line x1="293" y1="372" x2="445" y2="372" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/>
+  </g>
+</svg>
