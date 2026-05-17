@@ -94,18 +94,20 @@ export async function createTaskService(
     dueDate?: string | null;
     assignedToId?: string | null;
     listId?: string | null;
+    parentTaskId?: string | null;
   },
 ) {
   return prisma.task.create({
     data: {
-      title:       data.title,
-      description: data.description,
-      status:      data.status      ?? TaskStatus.TODO,
-      priority:    data.priority    ?? TaskPriority.MEDIUM,
-      category:    data.category    ?? TaskCategory.MY_DAY,
-      dueDate:     data.dueDate     ? new Date(data.dueDate) : null,
+      title:        data.title,
+      description:  data.description,
+      status:       data.status       ?? TaskStatus.TODO,
+      priority:     data.priority     ?? TaskPriority.MEDIUM,
+      category:     data.category     ?? TaskCategory.MY_DAY,
+      dueDate:      data.dueDate      ? new Date(data.dueDate) : null,
       assignedToId: data.assignedToId ?? null,
-      listId:      data.listId      ?? null,
+      listId:       data.listId       ?? null,
+      parentTaskId: data.parentTaskId ?? null,
       userId,
     },
     select: TASK_SAFE_SELECT,
@@ -125,6 +127,7 @@ export async function updateTaskService(
     dueDate?: string | null;
     assignedToId?: string | null;
     listId?: string | null;
+    parentTaskId?: string | null;
   },
 ) {
   const task = await prisma.task.findUnique({ where: { id }, select: { userId: true, assignedToId: true } });
@@ -151,8 +154,9 @@ export async function updateTaskService(
       ...(data.category    !== undefined && { category: data.category }),
       ...(data.dueDate     !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
-      ...(data.listId      !== undefined && { listId: data.listId }),
-      ...(completedAt      !== undefined && { completedAt }),
+      ...(data.listId       !== undefined && { listId: data.listId }),
+      ...(data.parentTaskId !== undefined && { parentTaskId: data.parentTaskId }),
+      ...(completedAt       !== undefined && { completedAt }),
     },
     select: TASK_SAFE_SELECT,
   });

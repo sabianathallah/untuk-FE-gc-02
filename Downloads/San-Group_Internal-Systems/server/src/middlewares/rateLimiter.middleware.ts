@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
 import { errorResponse } from '@/helpers/response';
 
-const isTest = process.env.NODE_ENV === 'test';
+const isTest = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
 
 // Di environment test, skip rate limiting agar test tidak saling memblokir
 const passThrough = (_req: Request, _res: Response, next: NextFunction) => next();

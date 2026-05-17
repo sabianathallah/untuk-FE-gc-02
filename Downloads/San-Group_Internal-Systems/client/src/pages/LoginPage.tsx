@@ -11,12 +11,13 @@ interface LoginResponse {
   data: {
     accessToken: string;
     user: {
-      id: string;
+      id:       string;
       fullName: string;
-      email: string;
+      email:    string;
       username: string;
-      role: string;
+      role:     string;
       division: string;
+      avatar:   string | null;
     };
   };
   message: string;
@@ -59,10 +60,12 @@ export default function LoginPage() {
 
       login(
         {
-          id: user.id,
-          name: user.fullName,
-          email: user.email,
-          role: user.role,
+          id:       user.id,
+          name:     user.fullName,
+          email:    user.email,
+          role:     user.role,
+          division: user.division,
+          avatar:   user.avatar,
         },
         accessToken,
       );

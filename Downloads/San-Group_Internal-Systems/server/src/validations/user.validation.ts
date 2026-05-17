@@ -30,5 +30,13 @@ export const updateUserSchema = z.object({
   }),
 });
 
-export type CreateUserInput = z.infer<typeof createUserSchema>['body'];
-export type UpdateUserInput = z.infer<typeof updateUserSchema>['body'];
+export const updateMyProfileSchema = z.object({
+  body: z.object({
+    fullName: z.string().min(2).max(100).optional(),
+    phone:    z.string().nullable().optional(),
+  }),
+});
+
+export type CreateUserInput    = z.infer<typeof createUserSchema>['body'];
+export type UpdateUserInput    = z.infer<typeof updateUserSchema>['body'];
+export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>['body'];

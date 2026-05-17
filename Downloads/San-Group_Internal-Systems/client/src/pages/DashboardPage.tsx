@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
 import {
-  CheckSquare2, AlertCircle, Megaphone, Users,
-  Plus, StickyNote, ArrowRight, Clock,
-  Circle, Loader2, CheckCircle2,
+  Star, AlertCircle, Megaphone, Users,
+  ArrowRight, Clock, CheckCircle2, Circle,
+  Loader2, CalendarDays, ChevronDown, ChevronRight,
+  Plus, ExternalLink, StickyNote, Pin,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useTaskStore, Task } from '@/stores/taskStore';
+import { useNoteStore } from '@/stores/noteStore';
 import { ROUTES } from '@/lib/constants';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -19,21 +22,31 @@ function getGreeting(): string {
   return 'Selamat malam';
 }
 
-function formatDate(): string {
+function formatDateLong(): string {
   return new Date().toLocaleDateString('id-ID', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }
 
-function relativeDate(iso: string | null): string {
-  if (!iso) return '';
+function formatDateShort(): string {
+  return new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+}
+
+function relativeDate(iso: string | null): { label: string; overdue: boolean } {
+  if (!iso) return { label: '', overdue: false };
   const d    = new Date(iso);
   const now  = new Date();
-  const diff = Math.ceil((d.getTime() - now.setHours(0,0,0,0)) / 86_400_000);
-  if (diff < 0)  return `${Math.abs(diff)} hari lalu`;
-  if (diff === 0) return 'Hari ini';
-  if (diff === 1) return 'Besok';
-  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+  now.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((d.getTime() - now.getTime()) / 86_400_000);
+  if (diff < 0)  return { label: `${Math.abs(diff)} hari lalu`, overdue: true };
+  if (diff === 0) return { label: 'Hari ini', overdue: false };
+  if (diff === 1) return { label: 'Besok', overdue: false };
+  return {
+    label: d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
+    overdue: false,
+  };
 }
 
 function bulletinDate(iso: string): string {
@@ -45,277 +58,457 @@ type TaskStatus   = 'TODO' | 'IN_PROGRESS' | 'DONE';
 type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 type BulletinPriority = 'NORMAL' | 'IMPORTANT' | 'URGENT';
 
-interface Task {
-  id:       string;
-  title:    string;
-  status:   TaskStatus;
-  priority: TaskPriority;
-  dueDate:  string | null;
-  assignee: { fullName: string } | null;
-}
-
 interface Bulletin {
-  id:         string;
-  title:      string;
-  priority:   BulletinPriority;
-  category:   string;
+  id:          string;
+  title:       string;
+  priority:    BulletinPriority;
+  category:    string;
   publishedAt: string | null;
-  isRead:     boolean;
+  isRead:      boolean;
 }
 
-// ── Priority colours (task left border) ───────────────────
-const PRIORITY_BORDER: Record<TaskPriority, string> = {
-  URGENT: 'border-l-danger',
-  HIGH:   'border-l-warning',
-  MEDIUM: 'border-l-info',
-  LOW:    'border-l-gray-300',
+// ── Config ─────────────────────────────────────────────────
+const PRIORITY_COLOR: Record<TaskPriority, string> = {
+  URGENT: 'text-danger',
+  HIGH:   'text-warning',
+  MEDIUM: 'text-info',
+  LOW:    'text-gray-300',
 };
 
-const PRIORITY_DOT: Record<BulletinPriority, string> = {
-  URGENT:    'bg-danger',
-  IMPORTANT: 'bg-warning',
-  NORMAL:    'bg-gray-300',
+const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  URGENT: 'Mendesak', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah',
 };
 
-const STATUS_ICON: Record<TaskStatus, React.ElementType> = {
-  TODO:        Circle,
-  IN_PROGRESS: Clock,
-  DONE:        CheckCircle2,
+const BULLETIN_BADGE: Record<BulletinPriority, string> = {
+  URGENT:    'bg-danger/10 text-danger',
+  IMPORTANT: 'bg-warning/10 text-warning',
+  NORMAL:    'bg-gray-100 text-gray-500',
 };
 
-const STATUS_COLOR: Record<TaskStatus, string> = {
-  TODO:        'text-gray-400',
-  IN_PROGRESS: 'text-info',
-  DONE:        'text-success',
+const BULLETIN_LABEL: Record<BulletinPriority, string> = {
+  URGENT: 'Mendesak', IMPORTANT: 'Penting', NORMAL: 'Umum',
 };
 
-// ── Main Component ─────────────────────────────────────────
+// ── Note color map (dashboard widget) ─────────────────────
+const NOTE_COLOR: Record<string, { bg: string; border: string }> = {
+  yellow: { bg: 'bg-yellow-50',  border: 'border-yellow-200' },
+  blue:   { bg: 'bg-blue-50',    border: 'border-blue-200'   },
+  green:  { bg: 'bg-green-50',   border: 'border-green-200'  },
+  pink:   { bg: 'bg-pink-50',    border: 'border-pink-200'   },
+  purple: { bg: 'bg-purple-50',  border: 'border-purple-200' },
+  gray:   { bg: 'bg-gray-50',    border: 'border-gray-300'   },
+  orange: { bg: 'bg-orange-50',  border: 'border-orange-200' },
+};
+
+// ── Progress Ring ──────────────────────────────────────────
+function ProgressRing({ done, total, size = 56 }: { done: number; total: number; size?: number }) {
+  const pct    = total === 0 ? 0 : Math.round((done / total) * 100);
+  const r      = (size - 8) / 2;
+  const circ   = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={4} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke="white" strokeWidth={4}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+        />
+      </svg>
+      <span className="absolute text-white font-semibold" style={{ fontSize: size * 0.22 }}>
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
+// ── Task Row ───────────────────────────────────────────────
+function TaskRow({ task, onToggleDone }: { task: Task; onToggleDone: (id: string) => void }) {
+  const isDone      = task.status === 'DONE';
+  const isProgress  = task.status === 'IN_PROGRESS';
+  const { label: dueLabel, overdue } = task.dueDate
+    ? relativeDate(task.dueDate)
+    : { label: '', overdue: false };
+
+  return (
+    <div className={cn(
+      'group flex items-center gap-3 px-5 py-3 border-b border-gray-50 last:border-0',
+      'hover:bg-gray-50/60 transition-colors cursor-default',
+    )}>
+      {/* Checkbox */}
+      <button
+        onClick={() => onToggleDone(task.id)}
+        className="flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-150"
+        style={{
+          borderColor: isDone ? '#22c55e' : isProgress ? '#3b82f6' : '#d1d5db',
+          backgroundColor: isDone ? '#22c55e' : 'transparent',
+        }}
+        title={isDone ? 'Tandai belum selesai' : 'Tandai selesai'}
+      >
+        {isDone && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
+        {isProgress && !isDone && (
+          <span className="w-2 h-2 rounded-full bg-info" />
+        )}
+      </button>
+
+      {/* Title + meta */}
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-sm text-gray-800 truncate', isDone && 'line-through text-gray-400')}>
+          {task.title}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {isProgress && !isDone && (
+            <span className="text-[10px] font-medium text-info flex items-center gap-0.5">
+              <Clock size={9} /> Berjalan
+            </span>
+          )}
+          {dueLabel && (
+            <span className={cn('text-[10px]', overdue ? 'text-danger font-semibold' : 'text-gray-400')}>
+              {overdue && '⚠ '}{dueLabel}
+            </span>
+          )}
+          {task.assignee && (
+            <span className="text-[10px] text-gray-400">· {task.assignee.fullName}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Priority star */}
+      <Star
+        size={13}
+        className={cn('flex-shrink-0', PRIORITY_COLOR[task.priority])}
+        fill={task.priority === 'URGENT' || task.priority === 'HIGH' ? 'currentColor' : 'none'}
+      />
+    </div>
+  );
+}
+
+// ── Quick Add Task ─────────────────────────────────────────
+function QuickAddTask({ onAdded }: { onAdded: (task: Task) => void }) {
+  const [active, setActive] = useState(false);
+  const [title, setTitle]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function open() {
+    setActive(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const res = await api.post('/tasks', { title: title.trim(), status: 'TODO', priority: 'MEDIUM' });
+      onAdded(res.data.data);
+      setTitle('');
+      setActive(false);
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!active) {
+    return (
+      <button
+        onClick={open}
+        className="flex items-center gap-2.5 w-full px-5 py-3.5 text-sm text-gray-400 hover:text-navy hover:bg-gray-50/60 transition-colors border-t border-gray-100"
+      >
+        <Plus size={16} className="text-navy" />
+        Tambahkan tugas
+      </button>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-center gap-2.5 px-5 py-3 border-t border-navy/20 bg-navy/5"
+    >
+      <Circle size={18} className="text-gray-300 flex-shrink-0" />
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && setActive(false)}
+        placeholder="Tulis judul tugas..."
+        className="flex-1 text-sm bg-transparent outline-none text-gray-800 placeholder:text-gray-400"
+      />
+      <button
+        type="submit"
+        disabled={saving || !title.trim()}
+        className="px-3 py-1 text-xs font-medium text-white bg-navy rounded hover:bg-navy-light disabled:opacity-40 transition-colors"
+      >
+        {saving ? <Loader2 size={12} className="animate-spin" /> : 'Tambah'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setActive(false)}
+        className="text-xs text-gray-400 hover:text-gray-600"
+      >
+        Batal
+      </button>
+    </form>
+  );
+}
+
+// ── Main ───────────────────────────────────────────────────
 export default function DashboardPage() {
-  const user    = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+  const user      = useAuthStore((s) => s.user);
+  const navigate  = useNavigate();
+  const isAdmin   = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
-  // ── Stats state ────────────────────────────────────────
-  const [taskStats, setTaskStats] = useState({ active: 0, overdue: 0, loading: true });
-  const [unreadBulletins, setUnreadBulletins] = useState({ count: 0, loading: true });
-  const [activeUsers, setActiveUsers] = useState({ count: 0, loading: isAdmin });
+  // ── Shared task store ──
+  const allTasks    = useTaskStore((s) => s.tasks);
+  const taskLoading = useTaskStore((s) => s.loading);
+  const fetchTasks  = useTaskStore((s) => s.fetchTasks);
+  const addTask     = useTaskStore((s) => s.addTask);
+  const toggleStatus = useTaskStore((s) => s.toggleStatus);
 
-  // ── Widget data ────────────────────────────────────────
-  const [recentTasks, setRecentTasks]       = useState<Task[]>([]);
-  const [recentBulletins, setRecentBulletins] = useState<Bulletin[]>([]);
-  const [widgetLoading, setWidgetLoading]   = useState(true);
+  // ── Shared note store ──
+  const allNotes    = useNoteStore((s) => s.notes);
+  const fetchNotes  = useNoteStore((s) => s.fetchNotes);
 
-  // Fetch tasks
-  useEffect(() => {
-    api.get('/tasks', { params: { limit: 100 } })
-      .then((res) => {
-        const all: Task[] = res.data.data ?? [];
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
+  const [bulletins, setBulletins] = useState<Bulletin[]>([]);
+  const [activeUsers, setActiveUsers] = useState(0);
+  const [showDone, setShowDone]   = useState(false);
 
-        const active  = all.filter((t) => t.status !== 'DONE');
-        const overdue = all.filter(
-          (t) => t.status !== 'DONE' && t.dueDate && new Date(t.dueDate) < now,
-        );
-
-        setTaskStats({ active: active.length, overdue: overdue.length, loading: false });
-
-        // Widget: up to 5 non-DONE tasks, ordered by closest due date first
-        const sorted = [...active].sort((a, b) => {
-          if (!a.dueDate && !b.dueDate) return 0;
-          if (!a.dueDate) return 1;
-          if (!b.dueDate) return -1;
-          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-        });
-        setRecentTasks(sorted.slice(0, 5));
-      })
-      .catch(() => setTaskStats({ active: 0, overdue: 0, loading: false }))
-      .finally(() => setWidgetLoading(false));
-  }, []);
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
   // Fetch bulletins
   useEffect(() => {
-    api.get('/bulletins', { params: { limit: 100 } })
-      .then((res) => {
-        const all: Bulletin[] = res.data.data ?? [];
-        const unread = all.filter((b) => !b.isRead).length;
-        setUnreadBulletins({ count: unread, loading: false });
-        setRecentBulletins(all.slice(0, 5));
-      })
-      .catch(() => setUnreadBulletins({ count: 0, loading: false }));
+    api.get('/bulletins', { params: { limit: 50 } })
+      .then((r) => setBulletins(r.data.data ?? []))
+      .catch(() => {});
   }, []);
 
-  // Fetch active users (admin only)
+  // Fetch active users (admin)
   useEffect(() => {
     if (!isAdmin) return;
     api.get('/users', { params: { isActive: 'true', limit: 1 } })
-      .then((res) => setActiveUsers({ count: res.data.meta?.total ?? 0, loading: false }))
-      .catch(() => setActiveUsers({ count: 0, loading: false }));
+      .then((r) => setActiveUsers(r.data.meta?.total ?? 0))
+      .catch(() => {});
   }, [isAdmin]);
 
-  // ── Stat card definitions ──────────────────────────────
-  type StatDef = {
-    label: string; value: number | string;
-    icon: React.ElementType; iconColor: string; loading: boolean;
-  };
+  function handleTaskAdded(task: Task) {
+    addTask(task);
+  }
 
-  const stats: StatDef[] = [
-    {
-      label: 'TUGAS AKTIF',
-      value: taskStats.active,
-      icon: CheckSquare2,
-      iconColor: 'text-info',
-      loading: taskStats.loading,
-    },
-    {
-      label: 'OVERDUE',
-      value: taskStats.overdue,
-      icon: AlertCircle,
-      iconColor: taskStats.overdue > 0 ? 'text-danger' : 'text-gray-400',
-      loading: taskStats.loading,
-    },
-    {
-      label: 'BULLETIN BELUM DIBACA',
-      value: unreadBulletins.count,
-      icon: Megaphone,
-      iconColor: unreadBulletins.count > 0 ? 'text-warning' : 'text-gray-400',
-      loading: unreadBulletins.loading,
-    },
-    ...(isAdmin
-      ? [{
-          label: 'STAFF AKTIF',
-          value: activeUsers.count,
-          icon: Users,
-          iconColor: 'text-success',
-          loading: activeUsers.loading,
-        } satisfies StatDef]
-      : []),
-  ];
+  // Derived
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const active  = allTasks.filter((t) => t.status !== 'DONE');
+  const done    = allTasks.filter((t) => t.status === 'DONE');
+  const overdue = active.filter((t) => t.dueDate && new Date(t.dueDate) < now);
+  const unreadBulletins = bulletins.filter((b) => !b.isRead);
+
+  // Sort active tasks: overdue first, then by due date, then no date
+  const sortedActive = [...active].sort((a, b) => {
+    const aOver = a.dueDate && new Date(a.dueDate) < now;
+    const bOver = b.dueDate && new Date(b.dueDate) < now;
+    if (aOver && !bOver) return -1;
+    if (!aOver && bOver) return  1;
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return  1;
+    if (!b.dueDate) return -1;
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  });
+
+  // Notes widget: pinned first, then recent, max 4
+  const dashNotes = [
+    ...allNotes.filter((n) => n.isPinned),
+    ...allNotes.filter((n) => !n.isPinned),
+  ].slice(0, 4);
+
+  const firstName = user?.name?.split(' ')[0] ?? 'User';
 
   return (
-    <div className="space-y-5">
-      {/* ── Welcome ── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-800">
-            {getGreeting()}, {user?.name?.split(' ')[0] ?? 'User'}
-          </h1>
-          <p className="text-sm text-gray-400 mt-0.5">{formatDate()}</p>
+    <div className="space-y-0 -m-6">
+      {/* ── Header / My Day ─────────────────────────────── */}
+      <div className="bg-navy px-8 pt-8 pb-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-navy-100/70 text-xs font-medium tracking-widest uppercase mb-1">
+              {formatDateShort()}
+            </p>
+            <h1 className="text-white text-2xl font-semibold leading-tight">
+              {getGreeting()}, {firstName}
+            </h1>
+            <p className="text-white/50 text-sm mt-1">
+              {active.length === 0
+                ? 'Semua tugas selesai!'
+                : `${active.length} tugas menunggu diselesaikan`}
+            </p>
+          </div>
+
+          {/* Progress ring */}
+          <div className="flex flex-col items-center gap-1">
+            {taskLoading
+              ? <div className="w-14 h-14 rounded-full border-4 border-white/20 animate-pulse" />
+              : <ProgressRing done={done.length} total={allTasks.length} size={60} />
+            }
+            <p className="text-white/60 text-[10px] mt-0.5">
+              {done.length}/{allTasks.length} selesai
+            </p>
+          </div>
         </div>
-        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-navy-50 text-navy">
-          {user?.role?.replace(/_/g, ' ')}
-        </span>
+
+        {/* Stats strip */}
+        <div className="flex items-center gap-5 mt-5 flex-wrap">
+          <StatChip
+            icon={AlertCircle}
+            label={`${overdue.length} overdue`}
+            active={overdue.length > 0}
+            danger
+          />
+          <StatChip
+            icon={Megaphone}
+            label={`${unreadBulletins.length} bulletin belum dibaca`}
+            active={unreadBulletins.length > 0}
+          />
+          {isAdmin && (
+            <StatChip
+              icon={Users}
+              label={`${activeUsers} staff aktif`}
+              active={false}
+            />
+          )}
+        </div>
       </div>
 
-      {/* ── Stat Cards ── */}
-      <div className={cn('grid gap-4', isAdmin ? 'grid-cols-4' : 'grid-cols-3')}>
-        {stats.map((s) => <StatCardItem key={s.label} stat={s} />)}
-      </div>
+      {/* ── Body ────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-0 bg-gray-50 min-h-[calc(100vh-220px)]">
 
-      {/* ── Main Content ── */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Tugas Saya — 2/3 width */}
-        <div className="col-span-2 bg-white border border-gray-200 rounded-lg flex flex-col">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-            <h2 className="text-md font-semibold text-gray-800">Tugas Saya</h2>
-            <Link to={ROUTES.TASKS} className="flex items-center gap-1 text-xs text-info hover:underline">
-              Lihat semua <ArrowRight size={12} />
+        {/* ── Task List (2/3) ── */}
+        <div className="col-span-2 bg-white border-r border-gray-100">
+          {/* Section header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={15} className="text-navy" />
+              <span className="text-sm font-semibold text-gray-800">Tugas Saya</span>
+              {active.length > 0 && (
+                <span className="text-[10px] font-semibold text-white bg-navy rounded-full px-1.5 py-0.5 leading-none">
+                  {active.length}
+                </span>
+              )}
+            </div>
+            <Link
+              to={ROUTES.TASKS}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-navy transition-colors"
+            >
+              Lihat semua <ArrowRight size={11} />
             </Link>
           </div>
 
-          <div className="flex-1">
-            {widgetLoading ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 size={20} className="animate-spin text-gray-300" />
-              </div>
-            ) : recentTasks.length === 0 ? (
-              <EmptyState
-                icon={CheckSquare2}
-                heading="Tidak ada tugas aktif"
-                description="Semua tugas selesai, atau belum ada tugas yang diberikan."
-                action={{ label: 'Buka Tasks', to: ROUTES.TASKS }}
-              />
-            ) : (
-              <ul className="divide-y divide-gray-50">
-                {recentTasks.map((task) => {
-                  const StatusIcon = STATUS_ICON[task.status];
-                  const now = new Date(); now.setHours(0, 0, 0, 0);
-                  const isOverdue = task.dueDate && new Date(task.dueDate) < now && task.status !== 'DONE';
+          {/* Task rows */}
+          {taskLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <Loader2 size={22} className="animate-spin text-gray-300" />
+              <p className="text-xs text-gray-400">Memuat tugas…</p>
+            </div>
+          ) : sortedActive.length === 0 && done.length === 0 ? (
+            <EmptyTasks onNavigate={() => navigate(ROUTES.TASKS)} />
+          ) : (
+            <>
+              {sortedActive.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <CheckCircle2 size={28} className="text-success" />
+                  <p className="text-sm font-medium text-gray-700">Semua tugas selesai!</p>
+                  <p className="text-xs text-gray-400">Tidak ada tugas aktif saat ini.</p>
+                </div>
+              ) : (
+                <div>
+                  {sortedActive.map((task) => (
+                    <TaskRow key={task.id} task={task} onToggleDone={(id) => toggleStatus(id, task.status)} />
+                  ))}
+                </div>
+              )}
 
-                  return (
-                    <li
-                      key={task.id}
-                      className={cn(
-                        'flex items-start gap-3 px-5 py-3.5 border-l-2',
-                        PRIORITY_BORDER[task.priority],
-                        'hover:bg-gray-50/50 transition-colors',
-                      )}
-                    >
-                      <StatusIcon size={15} className={cn('mt-0.5 flex-shrink-0', STATUS_COLOR[task.status])} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 truncate">{task.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {task.dueDate && (
-                            <span className={cn('text-xs', isOverdue ? 'text-danger font-medium' : 'text-gray-400')}>
-                              {isOverdue ? '⚠ ' : ''}{relativeDate(task.dueDate)}
-                            </span>
-                          )}
-                          {task.assignee && (
-                            <span className="text-xs text-gray-400">· {task.assignee.fullName}</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={cn(
-                        'text-xs px-2 py-0.5 rounded-full flex-shrink-0',
-                        task.status === 'IN_PROGRESS' ? 'bg-info/10 text-info' : 'bg-gray-100 text-gray-500',
-                      )}>
-                        {task.status === 'IN_PROGRESS' ? 'Berjalan' : 'Todo'}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+              {/* Quick add */}
+              <QuickAddTask onAdded={handleTaskAdded} />
+
+              {/* Completed section */}
+              {done.length > 0 && (
+                <div className="border-t border-gray-100">
+                  <button
+                    onClick={() => setShowDone((v) => !v)}
+                    className="flex items-center gap-2 w-full px-5 py-3 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    {showDone ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    <span className="font-medium">Selesai</span>
+                    <span className="text-gray-400">{done.length}</span>
+                  </button>
+                  {showDone && done.map((task) => (
+                    <TaskRow key={task.id} task={task} onToggleDone={(id) => toggleStatus(id, task.status)} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Right column — 1/3 width */}
-        <div className="space-y-4">
-          {/* Bulletin Terbaru */}
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
-              <h2 className="text-md font-semibold text-gray-800">Bulletin Terbaru</h2>
-              <Link to={ROUTES.BULLETIN} className="flex items-center gap-1 text-xs text-info hover:underline">
-                Semua <ArrowRight size={12} />
+        {/* ── Right Panel (1/3) ── */}
+        <div className="col-span-1 flex flex-col gap-0">
+
+          {/* Bulletin terbaru */}
+          <div className="flex-1 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <Megaphone size={14} className="text-navy" />
+                <span className="text-sm font-semibold text-gray-800">Bulletin</span>
+                {unreadBulletins.length > 0 && (
+                  <span className="text-[10px] font-semibold text-white bg-danger rounded-full px-1.5 py-0.5 leading-none">
+                    {unreadBulletins.length}
+                  </span>
+                )}
+              </div>
+              <Link to={ROUTES.BULLETIN} className="flex items-center gap-1 text-xs text-gray-400 hover:text-navy transition-colors">
+                Semua <ArrowRight size={11} />
               </Link>
             </div>
-            <div>
-              {unreadBulletins.loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 size={18} className="animate-spin text-gray-300" />
+
+            <div className="bg-white">
+              {bulletins.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                  <Megaphone size={24} className="text-gray-200 mb-2" />
+                  <p className="text-xs text-gray-400">Belum ada pengumuman</p>
                 </div>
-              ) : recentBulletins.length === 0 ? (
-                <EmptyState
-                  icon={Megaphone}
-                  heading="Belum ada bulletin"
-                  description="Pengumuman terbaru akan tampil di sini."
-                />
               ) : (
-                <ul className="divide-y divide-gray-50">
-                  {recentBulletins.map((b) => (
-                    <li key={b.id} className="flex items-start gap-2.5 px-4 py-3 hover:bg-gray-50/50 transition-colors">
-                      <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5', PRIORITY_DOT[b.priority])} />
+                <ul>
+                  {bulletins.slice(0, 6).map((b) => (
+                    <li
+                      key={b.id}
+                      className="flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors"
+                    >
+                      {/* Unread dot */}
+                      <div className="flex-shrink-0 mt-1.5">
+                        {!b.isRead
+                          ? <span className="block w-1.5 h-1.5 rounded-full bg-navy" />
+                          : <span className="block w-1.5 h-1.5 rounded-full bg-transparent" />
+                        }
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-1">
-                          <p className={cn('text-xs leading-snug truncate', !b.isRead ? 'font-semibold text-gray-800' : 'text-gray-600')}>
-                            {b.title}
-                          </p>
-                          {!b.isRead && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-info flex-shrink-0 mt-1" />
+                        <p className={cn(
+                          'text-xs leading-snug',
+                          !b.isRead ? 'font-semibold text-gray-800' : 'text-gray-600',
+                        )}>
+                          {b.title}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', BULLETIN_BADGE[b.priority])}>
+                            {BULLETIN_LABEL[b.priority]}
+                          </span>
+                          {b.publishedAt && (
+                            <span className="text-[10px] text-gray-400">{bulletinDate(b.publishedAt)}</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {b.publishedAt ? bulletinDate(b.publishedAt) : '—'}
-                        </p>
                       </div>
                     </li>
                   ))}
@@ -324,90 +517,132 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-4 py-3.5 border-b border-gray-100">
-              <h2 className="text-md font-semibold text-gray-800">Quick Actions</h2>
+          {/* Notes widget */}
+          <div className="border-b border-gray-100 bg-white">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <StickyNote size={14} className="text-navy" />
+                <span className="text-sm font-semibold text-gray-800">Catatan</span>
+                {allNotes.length > 0 && (
+                  <span className="text-[10px] text-gray-400">({allNotes.length})</span>
+                )}
+              </div>
+              <Link to={ROUTES.NOTES} className="flex items-center gap-1 text-xs text-gray-400 hover:text-navy transition-colors">
+                Semua <ArrowRight size={11} />
+              </Link>
             </div>
-            <div className="p-3 space-y-1">
-              <QuickAction icon={Plus}       label="Tambah Task"    to={ROUTES.TASKS}   />
-              <QuickAction icon={StickyNote} label="Tambah Note"    to={ROUTES.NOTES}   />
-              <QuickAction icon={Megaphone}  label="Lihat Bulletin" to={ROUTES.BULLETIN} />
+
+            {allNotes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center px-4">
+                <StickyNote size={20} className="text-gray-200 mb-1.5" />
+                <p className="text-xs text-gray-400">Belum ada catatan</p>
+              </div>
+            ) : (
+              <div className="p-3 space-y-2">
+                {dashNotes.map((note) => {
+                  const { bg, border } = NOTE_COLOR[note.color] ?? NOTE_COLOR.yellow;
+                  return (
+                    <Link
+                      key={note.id}
+                      to={ROUTES.NOTES}
+                      className={cn(
+                        'block rounded border px-3 py-2 hover:shadow-sm transition-shadow',
+                        bg, border,
+                      )}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        {note.isPinned && <Pin size={9} className="text-gray-400 flex-shrink-0 mt-0.5" />}
+                        <div className="min-w-0">
+                          {note.title && (
+                            <p className="text-xs font-semibold text-gray-800 truncate">{note.title}</p>
+                          )}
+                          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
+                            {note.content}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+                {allNotes.length > 4 && (
+                  <Link
+                    to={ROUTES.NOTES}
+                    className="block text-center text-xs text-gray-400 hover:text-navy py-1 transition-colors"
+                  >
+                    +{allNotes.length - 4} catatan lainnya
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Quick nav */}
+          <div className="bg-white px-4 py-3">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Menu Cepat</p>
+            <div className="space-y-0.5">
+              <NavLink to={ROUTES.TASKS}   label="Manajemen Tugas"   />
+              <NavLink to={ROUTES.NOTES}   label="Catatan Saya"      />
+              <NavLink to={ROUTES.BULLETIN} label="Papan Pengumuman" />
+              <NavLink to={ROUTES.DATABASE} label="Database Links"   />
               {isAdmin && (
-                <QuickAction icon={Users} label="Manage Users" to={ROUTES.ADMIN_USERS} />
+                <NavLink to={ROUTES.ADMIN_USERS} label="Kelola Pengguna" />
               )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* ── Overdue Callout (only when overdue > 0) ── */}
-      {taskStats.overdue > 0 && (
-        <div className="flex items-center gap-3 bg-danger/5 border border-danger/20 rounded-lg px-4 py-3">
-          <AlertCircle size={16} className="text-danger flex-shrink-0" />
-          <p className="text-sm text-danger font-medium flex-1">
-            Kamu memiliki <strong>{taskStats.overdue}</strong> tugas yang melewati deadline.
-          </p>
-          <Link
-            to={ROUTES.TASKS}
-            className="text-xs text-danger border border-danger/30 rounded px-2 py-1 hover:bg-danger/10 transition-colors flex-shrink-0"
-          >
-            Lihat sekarang
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
 
 // ── Sub-components ─────────────────────────────────────────
-function StatCardItem({ stat }: {
-  stat: { label: string; value: number | string; icon: React.ElementType; iconColor: string; loading: boolean };
+function StatChip({ icon: Icon, label, active, danger }: {
+  icon:   React.ElementType;
+  label:  string;
+  active: boolean;
+  danger?: boolean;
 }) {
-  const Icon = stat.icon;
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium text-gray-500 tracking-wider">{stat.label}</p>
-        <Icon size={16} className={stat.iconColor} />
-      </div>
-      {stat.loading ? (
-        <div className="h-7 w-10 rounded bg-gray-200 animate-pulse" />
-      ) : (
-        <p className="text-2xl font-semibold text-gray-800 leading-none">{stat.value}</p>
-      )}
+    <div className={cn(
+      'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full',
+      active && danger  ? 'bg-danger/20 text-danger font-semibold'  :
+      active            ? 'bg-white/20 text-white font-medium'       :
+                          'text-white/40',
+    )}>
+      <Icon size={11} />
+      {label}
     </div>
   );
 }
 
-function EmptyState({ icon: Icon, heading, description, action }: {
-  icon: React.ElementType; heading: string; description: string;
-  action?: { label: string; to: string };
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-      <Icon size={28} className="text-gray-300 mb-2.5" />
-      <p className="text-sm font-medium text-gray-600">{heading}</p>
-      <p className="text-xs text-gray-400 mt-1 max-w-[200px] leading-relaxed">{description}</p>
-      {action && (
-        <Link to={action.to} className="mt-3 text-xs text-info hover:underline flex items-center gap-1">
-          {action.label} <ArrowRight size={11} />
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function QuickAction({ icon: Icon, label, to }: {
-  icon: React.ElementType; label: string; to: string;
-}) {
+function NavLink({ to, label }: { to: string; label: string }) {
   return (
     <Link
       to={to}
-      className="flex items-center gap-2.5 px-3 py-2 rounded text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+      className="flex items-center justify-between px-2 py-2 rounded text-xs text-gray-600 hover:bg-gray-50 hover:text-navy transition-colors group"
     >
-      <Icon size={15} className="text-gray-400 flex-shrink-0" />
       {label}
+      <ExternalLink size={10} className="text-gray-300 group-hover:text-navy opacity-0 group-hover:opacity-100 transition-all" />
     </Link>
+  );
+}
+
+function EmptyTasks({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center px-8">
+      <div className="w-16 h-16 rounded-full bg-navy/5 flex items-center justify-center mb-4">
+        <CheckCircle2 size={28} className="text-navy/30" />
+      </div>
+      <p className="text-sm font-semibold text-gray-700">Belum ada tugas</p>
+      <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-[200px]">
+        Buat tugas pertama kamu atau minta admin untuk menugaskan.
+      </p>
+      <button
+        onClick={onNavigate}
+        className="mt-4 text-xs text-white bg-navy hover:bg-navy-light px-4 py-2 rounded transition-colors"
+      >
+        Buka Tasks
+      </button>
+    </div>
   );
 }

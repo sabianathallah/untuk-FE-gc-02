@@ -25,7 +25,7 @@ export async function listNotesService(userId: string, query: ParsedQs) {
     where.color = query.color;
   }
   if (query.isPinned !== undefined) {
-    where.isPinned = query.isPinned === 'true';
+    where.isPinned = query.isPinned === ('true' as unknown) || query.isPinned === (true as unknown);
   }
 
   return prisma.stickyNote.findMany({

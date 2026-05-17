@@ -1,24 +1,11 @@
-import { useEffect, useState, useRef, FormEvent, useCallback } from 'react';
+import { useEffect, useState, useRef, FormEvent, useMemo } from 'react';
 import {
   StickyNote, Plus, Search, X, Pin, PinOff,
   Trash2, Edit2, Loader2, AlertCircle,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
-
-// ── Types ──────────────────────────────────────────────────
-type NoteColor = 'yellow' | 'blue' | 'green' | 'pink' | 'purple' | 'gray' | 'orange';
-
-interface Note {
-  id:        string;
-  title:     string | null;
-  content:   string;
-  color:     NoteColor;
-  isPinned:  boolean;
-  position:  number;
-  createdAt: string;
-  updatedAt: string;
-}
+import { useNoteStore, Note, NoteColor } from '@/stores/noteStore';
 
 // ── Color Config ───────────────────────────────────────────
 const COLOR_MAP: Record<NoteColor, { bg: string; border: string; dot: string }> = {
@@ -54,7 +41,7 @@ function NoteFormModal({
   onClose: () => void;
   onSaved: (n: Note) => void;
 }) {
-  const [form, setForm]   = useState<FormState>(EMPTY_FORM);
+  const [form, setForm]     = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -299,14 +286,12 @@ function NoteCard({
 
 // ── Main Page ──────────────────────────────────────────────
 export default function NotesPage() {
-  const [notes, setNotes]       = useState<Note[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState('');
-  const [search, setSearch]     = useState('');
+  const { notes: allNotes, loading, error, fetchNotes, addNote, updateNote, removeNote } = useNoteStore();
+  const [search, setSearch]               = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [colorFilter, setColorFilter] = useState<NoteColor | ''>('');
-  const [modalOpen, setModalOpen]     = useState(false);
-  const [editing, setEditing]         = useState<Note | null>(null);
+  const [colorFilter, setColorFilter]     = useState<NoteColor | ''>('');
+  const [modalOpen, setModalOpen]         = useState(false);
+  const [editing, setEditing]             = useState<Note | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -314,53 +299,43 @@ export default function NotesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const fetchNotes = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const params: Record<string, string> = {};
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (colorFilter)     params.color  = colorFilter;
-      const res = await api.get('/notes', { params });
-      setNotes(res.data.data);
-    } catch {
-      setError('Gagal memuat notes. Coba lagi.');
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, colorFilter]);
-
+  // Fetch all notes once on mount
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
+
+  // Client-side filtering
+  const notes = useMemo(() => {
+    let result = allNotes;
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter((n) =>
+        (n.title ?? '').toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q),
+      );
+    }
+    if (colorFilter) result = result.filter((n) => n.color === colorFilter);
+    return result;
+  }, [allNotes, debouncedSearch, colorFilter]);
 
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(note: Note) { setEditing(note); setModalOpen(true); }
 
   function handleSaved(saved: Note) {
-    setNotes((prev) => {
-      const idx = prev.findIndex((n) => n.id === saved.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = saved;
-        return next;
-      }
-      return [saved, ...prev];
-    });
+    const exists = allNotes.some((n) => n.id === saved.id);
+    if (exists) updateNote(saved.id, saved);
+    else        addNote(saved);
   }
 
   function handleDeleted(id: string) {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
+    removeNote(id);
   }
 
   async function handleTogglePin(note: Note) {
-    const optimistic = notes.map((n) =>
-      n.id === note.id ? { ...n, isPinned: !n.isPinned } : n,
-    );
-    setNotes(optimistic);
+    updateNote(note.id, { isPinned: !note.isPinned });
     try {
       const res = await api.patch(`/notes/${note.id}`, { isPinned: !note.isPinned });
-      setNotes((prev) => prev.map((n) => (n.id === note.id ? res.data.data : n)));
+      updateNote(note.id, res.data.data);
     } catch {
-      setNotes(notes);
+      updateNote(note.id, { isPinned: note.isPinned });
     }
   }
 
@@ -434,9 +409,9 @@ export default function NotesPage() {
           ))}
         </div>
 
-        {notes.length > 0 && (
+        {allNotes.length > 0 && (
           <span className="ml-auto text-xs text-gray-400">
-            {notes.length} catatan
+            {notes.length} catatan{notes.length !== allNotes.length ? ` dari ${allNotes.length}` : ''}
           </span>
         )}
       </div>
@@ -461,17 +436,21 @@ export default function NotesPage() {
         </div>
       )}
 
-      {!loading && !error && notes.length === 0 && (
+      {!loading && !error && allNotes.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <StickyNote size={40} className="text-gray-300 mb-3" />
-          <p className="text-sm font-medium text-gray-600">
-            {debouncedSearch || colorFilter ? 'Tidak ada catatan yang cocok' : 'Belum ada catatan'}
-          </p>
+          <p className="text-sm font-medium text-gray-600">Belum ada catatan</p>
           <p className="text-xs text-gray-400 mt-1">
-            {debouncedSearch || colorFilter
-              ? 'Coba ubah filter pencarian'
-              : 'Klik "Note Baru" untuk membuat catatan pertama'}
+            Klik "Note Baru" untuk membuat catatan pertama
           </p>
+        </div>
+      )}
+
+      {!loading && !error && allNotes.length > 0 && notes.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <StickyNote size={40} className="text-gray-300 mb-3" />
+          <p className="text-sm font-medium text-gray-600">Tidak ada catatan yang cocok</p>
+          <p className="text-xs text-gray-400 mt-1">Coba ubah filter pencarian</p>
         </div>
       )}
 

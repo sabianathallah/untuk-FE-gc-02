@@ -135,6 +135,20 @@ export async function deleteUserService(id: string, requesterId: string) {
   });
 }
 
+export async function updateMyProfileService(
+  id: string,
+  data: { fullName?: string; phone?: string | null },
+) {
+  return prisma.user.update({
+    where: { id },
+    data: {
+      ...(data.fullName !== undefined && { fullName: data.fullName }),
+      ...(data.phone    !== undefined && { phone:    data.phone }),
+    },
+    select: USER_SAFE_SELECT,
+  });
+}
+
 export async function updateAvatarService(id: string, filePath: string) {
   // Delete old avatar file if exists
   const user = await prisma.user.findUnique({ where: { id }, select: { avatar: true } });

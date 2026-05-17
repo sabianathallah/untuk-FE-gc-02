@@ -4,6 +4,7 @@ import {
   getUserByIdService,
   createUserService,
   updateUserService,
+  updateMyProfileService,
   toggleUserService,
   deleteUserService,
   updateAvatarService,
@@ -64,6 +65,22 @@ export async function deleteUser(req: AuthRequest, res: Response, next: NextFunc
   } catch (err) {
     next(err);
   }
+}
+
+export async function updateMyProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = await updateMyProfileService(req.user!.userId, req.body);
+    successResponse(res, user, 'Profil berhasil diperbarui');
+  } catch (err) { next(err); }
+}
+
+export async function updateMyAvatar(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.file) { res.status(400).json({ success: false, message: 'File avatar tidak ditemukan' }); return; }
+    const filePath = req.file.path.replace(/\\/g, '/');
+    const user = await updateAvatarService(req.user!.userId, filePath);
+    successResponse(res, user, 'Avatar berhasil diperbarui');
+  } catch (err) { next(err); }
 }
 
 export async function updateAvatar(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
